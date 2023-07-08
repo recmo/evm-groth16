@@ -6,6 +6,7 @@ import "forge-std/console.sol";
 contract Verifier {
 
     // Useful precompile addresses
+    uint256 constant precompile_modexp = 0x05;
     uint256 constant precompile_add = 0x06;
     uint256 constant precompile_mul = 0x07;
     uint256 constant precompile_verify = 0x08;
@@ -56,6 +57,42 @@ contract Verifier {
         x = (p - a) % p; // Modulo is cheaper than branching
     }
 
+    function exp(uint256 a, uint256 e) public view returns (uint256 x) {
+        uint256[6] memory input;
+        input[0] = 0x20;
+        input[1] = 0x20;
+        input[2] = 0x20;
+        input[3] = a;
+        input[4] = e;
+        input[5] = p;
+        uint256[1] memory output;
+        bool success;
+        assembly {
+            success := staticcall(sub(gas(), 2000), precompile_modexp, input, 0xc0, output, 0x20)
+        }
+        require(success);
+        x = output[0];
+    }
+
+    function invert(uint256 a) public view returns (uint256 x) {
+        x = exp(a, exp_inverse);
+        require(mulmod(a, x, p) == 1);
+    }
+
+    function sqrt(uint256 a) public view returns (uint256 x) {
+        x = exp(a, exp_sqrt);
+        require(mulmod(x, x, p) == a);
+    }
+
+    function decompress_g1(uint256 c) public view returns (uint256 x, uint256 y) {
+        bool is_odd = c & 1 == 1;
+        x = c >> 1;
+        y = sqrt(mulmod(mulmod(x, x, p), x, p) + 3);
+        if (is_odd && y & 1 == 0) {
+            y = (p - y) % p;
+        }
+    }
+
     function add(uint256 a_x, uint256 a_y, uint256 b_x, uint256 b_y) public view returns (uint256 x, uint256 y) {
         uint256[4] memory input;
         input[0] = a_x;
@@ -95,28 +132,52 @@ contract Verifier {
         (x, y) = add(a_x, a_y, x, y);
     }
 
+    function verifyCompressedProof(
+        uint256 merkleTreeRoot,
+        uint256 nullifierHash,
+        uint256 signalHash,
+        uint256 externalNullifierHash,
+        uint256[6] calldata compressedProof
+    ) public view {
+        uint256 x;
+        uint256 y;
+        uint256[8] memory proof;
+        (x,y) = decompress_g1(compressedProof[0]); // A
+        proof[0] = x;
+        proof[1] = y;
+
+        proof[2] = compressedProof[1]; // B_x_0
+        proof[3] = compressedProof[2]; // B_x_1
+        proof[4] = compressedProof[3]; // B_y_0
+        proof[5] = compressedProof[4]; // B_y_1
+
+        (x,y) = decompress_g1(compressedProof[5]); // C
+        proof[6] = x;
+        proof[7] = y;
+
+        verifyProof(merkleTreeRoot, nullifierHash, signalHash, externalNullifierHash, proof);
+    }
+
     function verifyProof(
         uint256 merkleTreeRoot,
         uint256 nullifierHash,
-        uint256 signal,
-        uint256 externalNullifier,
-        uint256[8] calldata proof
-    ) external view {
-
-        signal = _hash(signal);
-        externalNullifier = _hash(externalNullifier);
-
-        console.logUint(signal);
-        console.logUint(externalNullifier);
-
+        uint256 signalHash,
+        uint256 externalNullifierHash,
+        uint256[8] memory proof
+    ) public view {
         // Compute the public input linear combination
         uint256 x;
         uint256 y;
         (x, y) = (constant_one_x, constant_one_y);
         (x, y) = muladd(x, y, merkle_tree_root_x, merkle_tree_root_y, merkleTreeRoot);
         (x, y) = muladd(x, y, nullifier_hash_x, nullifier_hash_y, nullifierHash);
-        (x, y) = muladd(x, y, signal_x, signal_y, signal);
-        (x, y) = muladd(x, y, external_nullifier_x, external_nullifier_y, externalNullifier);
+        (x, y) = muladd(x, y, signal_x, signal_y, signalHash);
+        (x, y) = muladd(x, y, external_nullifier_x, external_nullifier_y, externalNullifierHash);
+
+        // TODO: Public input is not checked for being in reduced form.
+        // OPT: Statically negate beta, gamma, delta instead of proof[1].
+        // OPT: Calldatacopy proof to input. Swap pairings so proof is contiguous.
+        // OPT: Codecopy remaining points except (x, y) to input.
 
         // Verify the pairing
         uint256[24] memory input;
@@ -155,12 +216,5 @@ contract Verifier {
         }
         require(success);
         require(output[0] == 1);
-    }
-
-    /// @dev Creates a keccak256 hash of a message compatible with the SNARK scalar modulus.
-    /// @param message: Message to be hashed.
-    /// @return Message digest.
-    function _hash(uint256 message) private pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(message))) >> 8;
     }
 }
