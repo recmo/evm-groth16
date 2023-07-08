@@ -9,7 +9,7 @@ Build using [Foundry]'s `forge`
 
 ```sh
 forge build
-forge test
+forge test --gas-report
 ```
 
 
