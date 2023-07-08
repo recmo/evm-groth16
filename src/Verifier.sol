@@ -19,27 +19,32 @@ contract Verifier {
     uint256 constant exp_inverse = p - 2;
     uint256 constant exp_sqrt = (p + 1) / 4;
 
+    // Useful constants in F1
+    uint256 constant constant_1_2 = 0x183227397098d014dc2822db40c0ac2ecbc0b548b438e5469e10460b6c3e7ea4;
+    uint256 constant constant_27_82 = 0x2b149d40ceb8aaae81be18991be06ac3b5b4c5e559dbefa33267e6dc24a138e5;
+    uint256 constant constant_3_82 = 0x2fcd3ac2a640a154eb23960892a85a68f031ca0c8344b23a577dcf1052b9e775;
+
     // Alpha point in G1
     uint256 constant alpha_x = 20491192805390485299153009773594534940189261866228447918068658471970481763042;
     uint256 constant alpha_y = 9383485363053290200918347156157836566562967994039712273449902621266178545958;
 
     // Beta point in G2 in powers of i
-    uint256 constant beta_x_0 = 4252822878758300859123897981450591353533073413197771768651442665752259397132;
-    uint256 constant beta_x_1 = 6375614351688725206403948262868962793625744043794305715222011528459656738731;
-    uint256 constant beta_y_0 = 21847035105528745403288232691147584728191162732299865338377159692350059136679;
-    uint256 constant beta_y_1 = 10505242626370262277552901082094356697409835680220590971873171140371331206856;
+    uint256 constant beta_x_1 = 4252822878758300859123897981450591353533073413197771768651442665752259397132;
+    uint256 constant beta_x_0 = 6375614351688725206403948262868962793625744043794305715222011528459656738731;
+    uint256 constant beta_y_1 = 21847035105528745403288232691147584728191162732299865338377159692350059136679;
+    uint256 constant beta_y_0 = 10505242626370262277552901082094356697409835680220590971873171140371331206856;
 
     // Gamma point in G2 in powers of i
-    uint256 constant gamma_x_0 = 11559732032986387107991004021392285783925812861821192530917403151452391805634;
-    uint256 constant gamma_x_1 = 10857046999023057135944570762232829481370756359578518086990519993285655852781;
-    uint256 constant gamma_y_0 = 4082367875863433681332203403145435568316851327593401208105741076214120093531;
-    uint256 constant gamma_y_1 = 8495653923123431417604973247489272438418190587263600148770280649306958101930;
+    uint256 constant gamma_x_1 = 11559732032986387107991004021392285783925812861821192530917403151452391805634;
+    uint256 constant gamma_x_0 = 10857046999023057135944570762232829481370756359578518086990519993285655852781;
+    uint256 constant gamma_y_1 = 4082367875863433681332203403145435568316851327593401208105741076214120093531;
+    uint256 constant gamma_y_0 = 8495653923123431417604973247489272438418190587263600148770280649306958101930;
 
     // Delta point in G2 in powers of i
-    uint256 constant delta_x_0 = 18976133691706015337908381757202123182841901611067930614519324084182946094218;
-    uint256 constant delta_x_1 = 1382518990777992893805140303684642328066746531257780279226677247567004248173;
-    uint256 constant delta_y_0 = 6627710380771660558660627878547223719795356903257079198333641681330388499309;
-    uint256 constant delta_y_1 = 21806956747910197517744499423107239699428979652113081469385876768212706694581;
+    uint256 constant delta_x_1 = 18976133691706015337908381757202123182841901611067930614519324084182946094218;
+    uint256 constant delta_x_0 = 1382518990777992893805140303684642328066746531257780279226677247567004248173;
+    uint256 constant delta_y_1 = 6627710380771660558660627878547223719795356903257079198333641681330388499309;
+    uint256 constant delta_y_0 = 21806956747910197517744499423107239699428979652113081469385876768212706694581;
 
     // Public input points in G1
     uint256 constant constant_one_x = 19918517214839406678907482305035208173510172567546071380302965459737278553528;
@@ -53,7 +58,7 @@ contract Verifier {
     uint256 constant external_nullifier_x = 3554830803181375418665292545416227334138838284686406179598687755626325482686;
     uint256 constant external_nullifier_y = 5951609174746846070367113593675211691311013364421437923470787371738135276998;
 
-    function negate(uint256 a) public view returns (uint256 x) {
+    function negate(uint256 a) public pure returns (uint256 x) {
         x = (p - a) % p; // Modulo is cheaper than branching
     }
 
@@ -84,12 +89,44 @@ contract Verifier {
         require(mulmod(x, x, p) == a);
     }
 
+    function sqrt_f2(uint256 a0, uint256 a1, bool hint) public view returns (uint256 x0, uint256 x1) {
+        uint256 d = sqrt(addmod(mulmod(a0, a0, p), mulmod(a1, a1, p), p));
+        if (hint) {
+            d = negate(d);
+        }
+        x0 = sqrt(mulmod(addmod(a0, d, p), constant_1_2, p));
+        x1 = mulmod(a1, invert(mulmod(x0, 2, p)), p);
+
+        require(a0 == addmod(mulmod(x0, x0, p), negate(mulmod(x1, x1, p)), p));
+        require(a1 == mulmod(2, mulmod(x0, x1, p), p));
+    }
+
     function decompress_g1(uint256 c) public view returns (uint256 x, uint256 y) {
         bool is_odd = c & 1 == 1;
         x = c >> 1;
         y = sqrt(mulmod(mulmod(x, x, p), x, p) + 3);
         if (is_odd && y & 1 == 0) {
-            y = (p - y) % p;
+            y = negate(y);
+        }
+    }
+
+    function decompress_g2(uint256 c0, uint256 c1) public view returns (uint256 x0, uint256 x1, uint256 y0, uint256 y1) {
+        bool is_odd = c0 & 1 == 1;
+        bool hint = c0 & 2 == 2;
+        x0 = c0 >> 2;
+        x1 = c1;
+
+        uint256 n3ab = mulmod(mulmod(x0, x1, p), p-3, p);
+        uint256 a_3 = mulmod(mulmod(x0, x0, p), x0, p);
+        uint256 b_3 = mulmod(mulmod(x1, x1, p), x1, p);
+
+        y0 = addmod(constant_27_82, addmod(a_3, mulmod(n3ab, x1, p), p), p);
+        y1 = negate(addmod(constant_3_82,  addmod(b_3, mulmod(n3ab, x0, p), p), p));
+
+        (y0, y1) = sqrt_f2(y0, y1, hint);
+        if (is_odd && y0 & 1 == 0) {
+            y0 = negate(y0);
+            y1 = negate(y1);
         }
     }
 
@@ -137,21 +174,21 @@ contract Verifier {
         uint256 nullifierHash,
         uint256 signalHash,
         uint256 externalNullifierHash,
-        uint256[6] calldata compressedProof
+        uint256[4] calldata compressedProof
     ) public view {
-        uint256 x;
-        uint256 y;
         uint256[8] memory proof;
-        (x,y) = decompress_g1(compressedProof[0]); // A
+        (uint256 x, uint256 y) = decompress_g1(compressedProof[0]); // A
         proof[0] = x;
         proof[1] = y;
 
-        proof[2] = compressedProof[1]; // B_x_0
-        proof[3] = compressedProof[2]; // B_x_1
-        proof[4] = compressedProof[3]; // B_y_0
-        proof[5] = compressedProof[4]; // B_y_1
+        (uint256 x0, uint256 x1, uint256 y0, uint256 y1) = decompress_g2(compressedProof[2], compressedProof[1]); // B
 
-        (x,y) = decompress_g1(compressedProof[5]); // C
+        proof[2] = x1;
+        proof[3] = x0;
+        proof[4] = y1;
+        proof[5] = y0;
+        
+        (x,y) = decompress_g1(compressedProof[3]); // C
         proof[6] = x;
         proof[7] = y;
 
@@ -184,31 +221,31 @@ contract Verifier {
         // e(-A, B)
         input[ 0] = proof[0]; // A_x
         input[ 1] = negate(proof[1]); // A_y
-        input[ 2] = proof[2]; // B_x_0
-        input[ 3] = proof[3]; // B_x_1
-        input[ 4] = proof[4]; // B_y_0
-        input[ 5] = proof[5]; // B_y_1
+        input[ 2] = proof[2]; // B_x_1
+        input[ 3] = proof[3]; // B_x_0
+        input[ 4] = proof[4]; // B_y_1
+        input[ 5] = proof[5]; // B_y_0
         // e(α, β)
         input[ 6] = alpha_x;
         input[ 7] = alpha_y;
-        input[ 8] = beta_x_0;
-        input[ 9] = beta_x_1;
-        input[10] = beta_y_0;
-        input[11] = beta_y_1;
+        input[ 8] = beta_x_1;
+        input[ 9] = beta_x_0;
+        input[10] = beta_y_1;
+        input[11] = beta_y_0;
         // e(γ, δ)
         input[12] = x;
         input[13] = y;
-        input[14] = gamma_x_0;
-        input[15] = gamma_x_1;
-        input[16] = gamma_y_0;
-        input[17] = gamma_y_1;
+        input[14] = gamma_x_1;
+        input[15] = gamma_x_0;
+        input[16] = gamma_y_1;
+        input[17] = gamma_y_0;
         // e(C, δ)
         input[18] = proof[6]; // C_x
         input[19] = proof[7]; // C_y
-        input[20] = delta_x_0;
-        input[21] = delta_x_1;
-        input[22] = delta_y_0;
-        input[23] = delta_y_1;
+        input[20] = delta_x_1;
+        input[21] = delta_x_0;
+        input[22] = delta_y_1;
+        input[23] = delta_y_0;
         bool success;
         uint256[1] memory output;
         assembly {
