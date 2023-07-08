@@ -133,34 +133,32 @@ contract Verifier {
     }
 
     function add(uint256 a_x, uint256 a_y, uint256 b_x, uint256 b_y) public view returns (uint256 x, uint256 y) {
-        uint256[4] memory input;
-        input[0] = a_x;
-        input[1] = a_y;
-        input[2] = b_x;
-        input[3] = b_y;
-        uint256[2] memory output;
         bool success;
         assembly {
-            success := staticcall(sub(gas(), 2000), precompile_add, input, 0x80, output, 0x40)
+            let f := mload(0x40)
+            mstore(f, a_x)
+            mstore(add(f, 0x20), a_y)
+            mstore(add(f, 0x40), b_x)
+            mstore(add(f, 0x60), b_y)
+            success := staticcall(sub(gas(), 2000), precompile_add, f, 0x80, f, 0x40)
+            x := mload(f)
+            y := mload(add(f, 0x20))
         }
         require(success);
-        x = output[0];
-        y = output[1];
     }
 
     function mul(uint256 a_x, uint256 a_y, uint256 s) public view returns (uint256 x, uint256 y) {
-        uint256[3] memory input;
-        input[0] = a_x;
-        input[1] = a_y;
-        input[2] = s;
-        uint256[2] memory output;
         bool success;
         assembly {
-            success := staticcall(sub(gas(), 2000), precompile_mul, input, 0x60, output, 0x40)
+            let f := mload(0x40)
+            mstore(f, a_x)
+            mstore(add(f, 0x20), a_y)
+            mstore(add(f, 0x40), s)
+            success := staticcall(sub(gas(), 2000), precompile_mul, f, 0x60, f, 0x40)
+            x := mload(f)
+            y := mload(add(f, 0x20))
         }
         require(success);
-        x = output[0];
-        y = output[1];
     }
 
     // Returns a + s ⋅ b with a,b in G1 and s in F1
