@@ -104,16 +104,16 @@ contract Verifier {
     }
 
     function decompress_g1(uint256 c) public view returns (uint256 x, uint256 y) {
-        bool is_odd = c & 1 == 1;
+        bool negate_point = c & 1 == 1;
         x = c >> 1;
         y = sqrt(mulmod(mulmod(x, x, p), x, p) + 3);
-        if (is_odd && y & 1 == 0) {
+        if (negate_point) {
             y = negate(y);
         }
     }
 
     function decompress_g2(uint256 c0, uint256 c1) public view returns (uint256 x0, uint256 x1, uint256 y0, uint256 y1) {
-        bool is_odd = c0 & 1 == 1;
+        bool negate_point = c0 & 1 == 1;
         bool hint = c0 & 2 == 2;
         x0 = c0 >> 2;
         x1 = c1;
@@ -126,7 +126,7 @@ contract Verifier {
         y1 = negate(addmod(constant_3_82,  addmod(b_3, mulmod(n3ab, x0, p), p), p));
 
         (y0, y1) = sqrt_f2(y0, y1, hint);
-        if (is_odd && y0 & 1 == 0) {
+        if (negate_point) {
             y0 = negate(y0);
             y1 = negate(y1);
         }
