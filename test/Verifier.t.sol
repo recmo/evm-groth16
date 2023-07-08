@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.13;
 
-import "semaphore/packages/contracts/contracts/base/SemaphoreVerifier.sol";
+import "../src/Verifier.sol";
 
-contract Reference is SemaphoreVerifier { }
-
-contract TestReference {
-    Reference public verifier;
+contract TestVerifier {
+    Verifier public verifier;
 
     function setUp() public {
-        verifier = new Reference();
+        verifier = new Verifier();
     }
 
     function testVerify() public {
@@ -27,8 +25,7 @@ contract TestReference {
                 0x2e4b11aa549ad6c667057b18be4f4437fda92f018a59430ebb992fa3462c9ca1,
                 0x2dde6d7baf0bfa09329ec8d44c38282f5bf7f9ead1914edd7dcaebb498c84519,
                 0x0c359f868a85c6e6c1ea819cfab4a867501a3688324d74df1fe76556558b1937
-            ],
-            20
+            ]
         );
     }
 }
