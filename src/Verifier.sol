@@ -217,6 +217,7 @@ contract Verifier {
         // OPT: Codecopy remaining points except (x, y) to input.
 
         // Verify the pairing
+        // Note that the precompile expects the F2 coefficients in reverse order.
         uint256[24] memory input;
         // e(-A, B)
         input[ 0] = proof[0]; // A_x
