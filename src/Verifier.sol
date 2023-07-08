@@ -12,12 +12,15 @@ contract Verifier {
     uint256 constant precompile_verify = 0x08;
 
     // Base Field modulus
-    uint256 constant t = 4965661367192848881;
-    uint256 constant p = 36*t**4 + 36*t**3 + 24*t**2 + 6*t + 1;
+    // uint256 constant t = 4965661367192848881;
+    // uint256 constant p = 36*t**4 + 36*t**3 + 24*t**2 + 6*t + 1;
+    uint256 constant p = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
 
     // Useful exponents in F1
-    uint256 constant exp_inverse = p - 2;
-    uint256 constant exp_sqrt = (p + 1) / 4;
+    // uint256 constant exp_inverse = p - 2;
+    // uint256 constant exp_sqrt = (p + 1) / 4;
+    uint256 constant exp_inverse = 21888242871839275222246405745257275088696311157297823662689037894645226208581;
+    uint256 constant exp_sqrt = 5472060717959818805561601436314318772174077789324455915672259473661306552146;
 
     // Useful constants in F1
     uint256 constant constant_1_2 = 0x183227397098d014dc2822db40c0ac2ecbc0b548b438e5469e10460b6c3e7ea4;
@@ -63,20 +66,19 @@ contract Verifier {
     }
 
     function exp(uint256 a, uint256 e) public view returns (uint256 x) {
-        uint256[6] memory input;
-        input[0] = 0x20;
-        input[1] = 0x20;
-        input[2] = 0x20;
-        input[3] = a;
-        input[4] = e;
-        input[5] = p;
-        uint256[1] memory output;
         bool success;
         assembly {
-            success := staticcall(sub(gas(), 2000), precompile_modexp, input, 0xc0, output, 0x20)
+            let f := mload(0x40)
+            mstore(f, 0x20)
+            mstore(add(f, 0x20), 0x20)
+            mstore(add(f, 0x40), 0x20)
+            mstore(add(f, 0x60), a)
+            mstore(add(f, 0x80), e)
+            mstore(add(f, 0xa0), p)
+            success := staticcall(sub(gas(), 2000), precompile_modexp, f, 0xc0, f, 0x20)
+            x := mload(f)
         }
         require(success);
-        x = output[0];
     }
 
     function invert(uint256 a) public view returns (uint256 x) {
